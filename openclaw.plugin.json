@@ -1,0 +1,76 @@
+{
+  "id": "memory-kovamind",
+  "kind": "memory",
+  "uiHints": {
+    "apiKey": {
+      "label": "Kova Mind API Key",
+      "sensitive": true,
+      "placeholder": "km_live_...",
+      "help": "Your Kova Mind API key (or use ${KOVAMIND_API_KEY})"
+    },
+    "userId": {
+      "label": "User ID",
+      "placeholder": "axiom",
+      "help": "Default user ID for memory operations"
+    },
+    "apiUrl": {
+      "label": "API URL",
+      "placeholder": "https://api.kovamind.ai",
+      "help": "Kova Mind API base URL",
+      "advanced": true
+    },
+    "autoCapture": {
+      "label": "Auto-Capture",
+      "help": "Automatically extract memories from conversations"
+    },
+    "autoRecall": {
+      "label": "Auto-Recall",
+      "help": "Automatically inject relevant memories into context"
+    },
+    "maxRecallPatterns": {
+      "label": "Max Recall Patterns",
+      "placeholder": "5",
+      "help": "Maximum memories to inject per turn",
+      "advanced": true
+    },
+    "vaultEnabled": {
+      "label": "Secrets Vault",
+      "help": "Enable secrets vault for secure credential storage"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string"
+      },
+      "userId": {
+        "type": "string"
+      },
+      "apiUrl": {
+        "type": "string",
+        "default": "https://api.kovamind.ai"
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true
+      },
+      "maxRecallPatterns": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 20,
+        "default": 5
+      },
+      "vaultEnabled": {
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": ["apiKey", "userId"]
+  }
+}
