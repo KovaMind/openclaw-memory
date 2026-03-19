@@ -33,7 +33,7 @@ interface Pattern {
 // HTTP Client
 // ============================================================================
 
-async function apiRequest(
+export async function apiRequest(
   baseUrl: string,
   apiKey: string,
   method: string,
@@ -68,18 +68,20 @@ async function apiRequest(
 // ============================================================================
 
 const PROMPT_INJECTION_PATTERNS = [
-  /ignore (all|any|previous|above|prior) instructions/i,
+  /ignore\s+(all\s+)?(any\s+)?(previous\s+)?(above\s+)?(prior\s+)?instructions/i,
   /do not follow (the )?(system|developer)/i,
   /system prompt/i,
+  /developer (mode|message)/i,
   /<\s*(system|assistant|developer|tool|function|relevant-memories)\b/i,
+  /\b(reveal|show|output|print|display)\s+(your\s+)?(system|api|secret|key|token|password|prompt)/i,
 ];
 
-function looksLikePromptInjection(text: string): boolean {
+export function looksLikePromptInjection(text: string): boolean {
   const normalized = text.replace(/\s+/g, " ").trim();
   return PROMPT_INJECTION_PATTERNS.some((p) => p.test(normalized));
 }
 
-function escapeForPrompt(text: string): string {
+export function escapeForPrompt(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -87,7 +89,7 @@ function escapeForPrompt(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function formatMemoriesContext(patterns: Pattern[]): string {
+export function formatMemoriesContext(patterns: Pattern[]): string {
   const lines = patterns.map(
     (p, i) =>
       `${i + 1}. [${p.category}] ${escapeForPrompt(p.pattern)} (${(p.confidence * 100).toFixed(0)}%)`,

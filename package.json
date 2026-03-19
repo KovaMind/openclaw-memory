@@ -21,6 +21,13 @@
       "optional": true
     }
   },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0",
+    "@sinclair/typebox": "^0.34.0"
+  },
   "openclaw": {
     "extensions": [
       "./index.ts"
