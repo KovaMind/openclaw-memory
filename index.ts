@@ -370,6 +370,175 @@ const kovamindMemoryPlugin = {
     );
 
     // ========================================================================
+    // Vault Tools (only registered when vaultEnabled=true)
+    // ========================================================================
+
+    if (cfg.vaultEnabled) {
+      api.registerTool(
+        {
+          name: "vault_store",
+          label: "Vault Store",
+          description:
+            "Securely store a secret (API key, password, token) in the encrypted vault. Never store secrets in regular memory.",
+          parameters: Type.Object({
+            label: Type.String({ description: "Name for this secret (e.g., 'aws-staging-key')" }),
+            value: Type.String({ description: "The secret value to encrypt and store" }),
+            tags: Type.Optional(Type.String({ description: "Comma-separated tags for organization" })),
+          }),
+          async execute(
+            _toolCallId: string,
+            params: { label: string; value: string; tags?: string },
+          ) {
+            try {
+              const data = await request("POST", "/vault/secrets", {
+                agent_id: userId,
+                label: params.label,
+                value: params.value,
+                tags: params.tags,
+              });
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Secret "${params.label}" stored (id: ${data.id}). Hash: ${data.hash?.slice(0, 12)}...`,
+                  },
+                ],
+                details: { action: "stored", id: data.id, label: params.label },
+              };
+            } catch (err: any) {
+              return {
+                content: [{ type: "text", text: `Vault store failed: ${err.message?.slice(0, 200)}` }],
+              };
+            }
+          },
+        },
+        { name: "vault_store" },
+      );
+
+      api.registerTool(
+        {
+          name: "vault_get",
+          label: "Vault Get",
+          description:
+            "Retrieve a decrypted secret from the vault by its ID. The vault must be unlocked.",
+          parameters: Type.Object({
+            secretId: Type.String({ description: "The secret ID to retrieve" }),
+          }),
+          async execute(_toolCallId: string, params: { secretId: string }) {
+            try {
+              const data = await request(
+                "GET",
+                `/vault/secrets/${encodeURIComponent(params.secretId)}?agent_id=${encodeURIComponent(userId)}`,
+              );
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Secret value: ${data.value}`,
+                  },
+                ],
+                details: { id: data.id },
+              };
+            } catch (err: any) {
+              return {
+                content: [{ type: "text", text: `Vault get failed: ${err.message?.slice(0, 200)}` }],
+              };
+            }
+          },
+        },
+        { name: "vault_get" },
+      );
+
+      api.registerTool(
+        {
+          name: "vault_list",
+          label: "Vault List",
+          description:
+            "List all secret labels stored in the vault (names only, not values).",
+          parameters: Type.Object({}),
+          async execute() {
+            try {
+              const data = await request(
+                "GET",
+                `/vault/secrets?agent_id=${encodeURIComponent(userId)}`,
+              );
+              const secrets = (data.secrets ?? []) as Array<{
+                id: string;
+                label: string;
+                tags?: string;
+                created_at: string;
+              }>;
+
+              if (secrets.length === 0) {
+                return {
+                  content: [{ type: "text", text: "Vault is empty." }],
+                  details: { count: 0 },
+                };
+              }
+
+              const lines = secrets.map(
+                (s) => `- ${s.label} (id: ${s.id}${s.tags ? `, tags: ${s.tags}` : ""})`,
+              );
+
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `${secrets.length} secret(s) in vault:\n${lines.join("\n")}`,
+                  },
+                ],
+                details: { count: secrets.length, secrets: secrets.map((s) => ({ id: s.id, label: s.label })) },
+              };
+            } catch (err: any) {
+              return {
+                content: [{ type: "text", text: `Vault list failed: ${err.message?.slice(0, 200)}` }],
+              };
+            }
+          },
+        },
+        { name: "vault_list" },
+      );
+
+      api.registerTool(
+        {
+          name: "vault_delete",
+          label: "Vault Delete",
+          description:
+            "Permanently destroy a secret from the vault. This cannot be undone.",
+          parameters: Type.Object({
+            secretId: Type.String({ description: "The secret ID to destroy" }),
+          }),
+          async execute(_toolCallId: string, params: { secretId: string }) {
+            try {
+              const data = await request(
+                "DELETE",
+                `/vault/secrets/${encodeURIComponent(params.secretId)}?agent_id=${encodeURIComponent(userId)}`,
+              );
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: data.destroyed
+                      ? `Secret ${params.secretId} destroyed.`
+                      : `Secret ${params.secretId} not found.`,
+                  },
+                ],
+                details: { action: data.destroyed ? "destroyed" : "not_found", id: params.secretId },
+              };
+            } catch (err: any) {
+              return {
+                content: [{ type: "text", text: `Vault delete failed: ${err.message?.slice(0, 200)}` }],
+              };
+            }
+          },
+        },
+        { name: "vault_delete" },
+      );
+
+      api.logger.info?.("memory-kovamind: vault tools registered");
+    }
+
+    // ========================================================================
     // Lifecycle: Auto-Recall (before each agent turn)
     // ========================================================================
 
