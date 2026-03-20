@@ -1,6 +1,6 @@
 {
   "name": "@kovamind/openclaw-memory",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OpenClaw memory plugin — Kova Mind as your agent's memory backend",
   "type": "module",
   "main": "index.ts",
