@@ -503,7 +503,7 @@ const kovamindMemoryPlugin = {
         label: "Vault Execute",
         description: "Execute an action using a credential. The credential is never exposed to you.",
         parameters: Type.Object({
-          handle: Type.String({ description: "Credential handle from vault_handles" }),
+          handle: Type.Optional(Type.String({ description: "Credential handle from vault_handles (omit if using auto_detect)" })),
           action: Type.String({ description: "Action: http_request or browser_fill" }),
           target: Type.String({ description: "Target URL" }),
           mapping: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Field mapping" })),
