@@ -475,6 +475,30 @@ const kovamindMemoryPlugin = {
 
     api.registerTool(
       {
+        name: "vault_find",
+        label: "Vault Find",
+        description: "Find credentials matching a search query. You will never see credential values.",
+        parameters: Type.Object({
+          query: Type.String({ description: "Search query (e.g., 'GitHub login', 'API key')" }),
+        }),
+        async execute(_toolCallId: string, params: { query: string }) {
+          const data = await request("GET", `/vault/v2/find?q=${encodeURIComponent(params.query)}`);
+          const results = (data.results ?? []) as Array<{ handle: string; label: string; schema_type: string; score: number }>;
+          if (results.length === 0) {
+            return { content: [{ type: "text", text: "No matching credentials found." }], details: { count: 0 } };
+          }
+          const text = results.map((r, i) => `${i + 1}. [${r.schema_type}] ${r.label} (handle: ${r.handle}, score: ${r.score.toFixed(2)})`).join("\n");
+          return {
+            content: [{ type: "text", text: `Found ${results.length} match(es):\n${text}` }],
+            details: { count: results.length, results },
+          };
+        },
+      },
+      { name: "vault_find" },
+    );
+
+    api.registerTool(
+      {
         name: "vault_execute",
         label: "Vault Execute",
         description: "Execute an action using a credential. The credential is never exposed to you.",
@@ -483,10 +507,12 @@ const kovamindMemoryPlugin = {
           action: Type.String({ description: "Action: http_request or browser_fill" }),
           target: Type.String({ description: "Target URL" }),
           mapping: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Field mapping" })),
+          auto_detect: Type.Optional(Type.String({ description: "Query to auto-detect credential instead of handle" })),
         }),
-        async execute(_toolCallId: string, params: { handle: string; action: string; target: string; mapping?: Record<string, string> }) {
+        async execute(_toolCallId: string, params: { handle: string; action: string; target: string; mapping?: Record<string, string>; auto_detect?: string }) {
           const body: Record<string, unknown> = { handle: params.handle, action: params.action, target: params.target };
           if (params.mapping) body.mapping = params.mapping;
+          if (params.auto_detect) body.auto_detect = params.auto_detect;
           const data = await request("POST", "/vault/v2/execute", body);
           const success = data.success as boolean;
           const output = (data.output as string) || "";

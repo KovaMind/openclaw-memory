@@ -305,7 +305,7 @@ describe("register()", () => {
   it("registers 5 tools", () => {
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
-    expect(api.registerTool).toHaveBeenCalledTimes(11);
+    expect(api.registerTool).toHaveBeenCalledTimes(12);
   });
 
   it("registers memory_recall tool", () => {
@@ -889,7 +889,7 @@ describe("security: error message information leakage", () => {
 // ════════════════════════════════════════════════════════════════════
 
 describe("vault v2: registration", () => {
-  it("registers all 6 vault tools", () => {
+  it("registers all 7 vault tools", () => {
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
     expect(api._tools["vault_setup"]).toBeDefined();
@@ -897,6 +897,7 @@ describe("vault v2: registration", () => {
     expect(api._tools["vault_lock"]).toBeDefined();
     expect(api._tools["vault_store"]).toBeDefined();
     expect(api._tools["vault_handles"]).toBeDefined();
+    expect(api._tools["vault_find"]).toBeDefined();
     expect(api._tools["vault_execute"]).toBeDefined();
   });
 });
@@ -1071,6 +1072,48 @@ describe("tool: vault_handles", () => {
   });
 });
 
+describe("tool: vault_find", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("returns matching credentials", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { results: [
+        { handle: "hdl_1", label: "GitHub PAT", schema_type: "api_key", score: 0.95 },
+        { handle: "hdl_2", label: "GitHub SSH", schema_type: "ssh_key", score: 0.72 },
+      ]},
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_find"].execute("tc1", { query: "GitHub" });
+    expect(result.content[0].text).toContain("Found 2 match(es)");
+    expect(result.content[0].text).toContain("hdl_1");
+    expect(result.content[0].text).toContain("GitHub PAT");
+    expect(result.content[0].text).toContain("0.95");
+    expect(result.details.count).toBe(2);
+    expect(result.details.results).toHaveLength(2);
+  });
+
+  it("returns empty message when no matches", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { results: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_find"].execute("tc1", { query: "nonexistent" });
+    expect(result.content[0].text).toContain("No matching credentials found");
+    expect(result.details.count).toBe(0);
+  });
+
+  it("calls GET with encoded query parameter", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { results: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_find"].execute("tc1", { query: "API key" });
+    expect(fetchCalls[0].url).toContain("/vault/v2/find?q=API%20key");
+    expect(fetchCalls[0].init?.method).toBe("GET");
+  });
+});
+
 describe("tool: vault_execute", () => {
   beforeEach(() => { fetchCalls = []; });
   afterEach(() => { vi.restoreAllMocks(); });
@@ -1142,6 +1185,40 @@ describe("tool: vault_execute", () => {
     });
     const body = JSON.parse(fetchCalls[0].init?.body as string);
     expect(body.mapping).toBeUndefined();
+  });
+
+
+  it("sends auto_detect when provided", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+      auto_detect: "GitHub API",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.auto_detect).toBe("GitHub API");
+  });
+
+  it("does not send auto_detect when omitted", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.auto_detect).toBeUndefined();
   });
 
   it("truncates long output to 2000 chars", async () => {
