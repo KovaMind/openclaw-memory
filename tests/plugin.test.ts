@@ -305,7 +305,7 @@ describe("register()", () => {
   it("registers 5 tools", () => {
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
-    expect(api.registerTool).toHaveBeenCalledTimes(5);
+    expect(api.registerTool).toHaveBeenCalledTimes(12);
   });
 
   it("registers memory_recall tool", () => {
@@ -885,18 +885,391 @@ describe("security: error message information leakage", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-// VAULT REMOVED — Vault v2 will use opaque handles, not plaintext
+// VAULT V2 TOOL TESTS
 // ════════════════════════════════════════════════════════════════════
 
-describe("vault tools removed", () => {
-  it("does not register any vault tools", () => {
+describe("vault v2: registration", () => {
+  it("registers all 7 vault tools", () => {
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
-    expect(api._tools["vault_store"]).toBeUndefined();
-    expect(api._tools["vault_get"]).toBeUndefined();
-    expect(api._tools["vault_list"]).toBeUndefined();
-    expect(api._tools["vault_delete"]).toBeUndefined();
-    expect(api.registerTool).toHaveBeenCalledTimes(5); // memory tools only
+    expect(api._tools["vault_setup"]).toBeDefined();
+    expect(api._tools["vault_unlock"]).toBeDefined();
+    expect(api._tools["vault_lock"]).toBeDefined();
+    expect(api._tools["vault_store"]).toBeDefined();
+    expect(api._tools["vault_handles"]).toBeDefined();
+    expect(api._tools["vault_find"]).toBeDefined();
+    expect(api._tools["vault_execute"]).toBeDefined();
+  });
+});
+
+describe("tool: vault_setup", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("returns recovery words on success", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { status: "created", recovery_words: ["alpha", "bravo", "charlie"] },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_setup"].execute("tc1", { passphrase: "test1234" });
+    expect(result.content[0].text).toContain("Recovery words:");
+    expect(result.content[0].text).toContain("alpha, bravo, charlie");
+    expect(result.details.status).toBe("created");
+    expect(result.details.wordCount).toBe(3);
+  });
+
+  it("sends passphrase to API", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { status: "created", recovery_words: ["a"] },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_setup"].execute("tc1", { passphrase: "mysecret1" });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.passphrase).toBe("mysecret1");
+    expect(fetchCalls[0].url).toContain("/vault/v2/setup");
+  });
+});
+
+describe("tool: vault_unlock", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("returns status on unlock", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { status: "unlocked" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_unlock"].execute("tc1", { passphrase: "test1234" });
+    expect(result.content[0].text).toContain("unlocked");
+    expect(result.details.status).toBe("unlocked");
+  });
+});
+
+describe("tool: vault_lock", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("returns locked status", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { status: "locked" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_lock"].execute("tc1", {});
+    expect(result.content[0].text).toContain("locked");
+    expect(result.details.status).toBe("locked");
+  });
+
+  it("calls lock endpoint with POST", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { status: "locked" } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_lock"].execute("tc1", {});
+    expect(fetchCalls[0].url).toContain("/vault/v2/lock");
+    expect(fetchCalls[0].init?.method).toBe("POST");
+  });
+});
+
+describe("tool: vault_store", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("stores credential and returns handle", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handle: "hdl_abc123", label: "GitHub PAT" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_store"].execute("tc1", {
+      label: "GitHub PAT",
+      schema_type: "api_key",
+      fields: { key: "ghp_fake123" },
+    });
+    expect(result.content[0].text).toContain("hdl_abc123");
+    expect(result.content[0].text).toContain("GitHub PAT");
+    expect(result.details.handle).toBe("hdl_abc123");
+  });
+
+  it("sends tags when provided", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handle: "hdl_x", label: "test" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_store"].execute("tc1", {
+      label: "test",
+      schema_type: "api_key",
+      fields: { key: "val" },
+      tags: "ci,deploy",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.tags).toBe("ci,deploy");
+  });
+
+  it("does not send tags when omitted", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handle: "hdl_x", label: "test" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_store"].execute("tc1", {
+      label: "test",
+      schema_type: "api_key",
+      fields: { key: "val" },
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.tags).toBeUndefined();
+  });
+});
+
+describe("tool: vault_handles", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("lists handles when credentials exist", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handles: [
+        { handle: "hdl_1", label: "GitHub", schema_type: "api_key" },
+        { handle: "hdl_2", label: "DB Prod", schema_type: "database" },
+      ]},
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_handles"].execute("tc1", {});
+    expect(result.content[0].text).toContain("2 credential(s)");
+    expect(result.content[0].text).toContain("hdl_1");
+    expect(result.content[0].text).toContain("GitHub");
+    expect(result.details.count).toBe(2);
+  });
+
+  it("returns empty message when no credentials", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { handles: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_handles"].execute("tc1", {});
+    expect(result.content[0].text).toContain("No credentials stored");
+    expect(result.details.count).toBe(0);
+  });
+
+  it("calls GET on handles endpoint", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { handles: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_handles"].execute("tc1", {});
+    expect(fetchCalls[0].url).toContain("/vault/v2/handles");
+    expect(fetchCalls[0].init?.method).toBe("GET");
+  });
+});
+
+describe("tool: vault_find", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("returns matching credentials", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { results: [
+        { handle: "hdl_1", label: "GitHub PAT", schema_type: "api_key", score: 0.95 },
+        { handle: "hdl_2", label: "GitHub SSH", schema_type: "ssh_key", score: 0.72 },
+      ]},
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_find"].execute("tc1", { query: "GitHub" });
+    expect(result.content[0].text).toContain("Found 2 match(es)");
+    expect(result.content[0].text).toContain("hdl_1");
+    expect(result.content[0].text).toContain("GitHub PAT");
+    expect(result.content[0].text).toContain("0.95");
+    expect(result.details.count).toBe(2);
+    expect(result.details.results).toHaveLength(2);
+  });
+
+  it("returns empty message when no matches", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { results: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_find"].execute("tc1", { query: "nonexistent" });
+    expect(result.content[0].text).toContain("No matching credentials found");
+    expect(result.details.count).toBe(0);
+  });
+
+  it("calls GET with encoded query parameter", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { results: [] } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_find"].execute("tc1", { query: "API key" });
+    expect(fetchCalls[0].url).toContain("/vault/v2/find?q=API%20key");
+    expect(fetchCalls[0].init?.method).toBe("GET");
+  });
+});
+
+describe("tool: vault_execute", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("reports success", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "HTTP 200 OK", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    expect(result.content[0].text).toContain("succeeded");
+    expect(result.details.success).toBe(true);
+    expect(result.details.statusCode).toBe(200);
+  });
+
+  it("reports failure with error", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: false, output: "", status_code: 401, error: "Unauthorized" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    expect(result.content[0].text).toContain("failed");
+    expect(result.content[0].text).toContain("Unauthorized");
+    expect(result.details.success).toBe(false);
+  });
+
+  it("sends mapping when provided", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "browser_fill",
+      target: "https://login.example.com",
+      mapping: { username: "email", password: "pass" },
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.mapping).toEqual({ username: "email", password: "pass" });
+    expect(body.handle).toBe("hdl_abc");
+    expect(body.action).toBe("browser_fill");
+  });
+
+  it("does not send mapping when omitted", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.mapping).toBeUndefined();
+  });
+
+
+  it("sends auto_detect when provided", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+      auto_detect: "GitHub API",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.auto_detect).toBe("GitHub API");
+  });
+
+  it("does not send auto_detect when omitted", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: "", status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.auto_detect).toBeUndefined();
+  });
+
+  it("truncates long output to 2000 chars", async () => {
+    const longOutput = "X".repeat(3000);
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { success: true, output: longOutput, status_code: 200, error: null },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_execute"].execute("tc1", {
+      handle: "hdl_abc",
+      action: "http_request",
+      target: "https://api.example.com",
+    });
+    // Output should be truncated - text should be less than 3000 + overhead
+    expect(result.content[0].text.length).toBeLessThan(2100);
+  });
+});
+
+describe("security: vault tools never expose credentials", () => {
+  beforeEach(() => { fetchCalls = []; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("vault_store does not return credential fields", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handle: "hdl_sec", label: "Secret Key" },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_store"].execute("tc1", {
+      label: "Secret Key",
+      schema_type: "api_key",
+      fields: { key: "super_secret_value_12345" },
+    });
+    const text = result.content[0].text;
+    expect(text).not.toContain("super_secret_value_12345");
+    expect(text).toContain("hdl_sec");
+  });
+
+  it("vault_handles only returns handles, not values", async () => {
+    vi.stubGlobal("fetch", mockFetch([{
+      status: 200,
+      body: { handles: [{ handle: "hdl_1", label: "Test", schema_type: "api_key" }] },
+    }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    const result = await api._tools["vault_handles"].execute("tc1", {});
+    expect(result.content[0].text).toContain("hdl_1");
+    expect(result.content[0].text).not.toContain("secret");
   });
 });
 

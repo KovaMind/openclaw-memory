@@ -369,6 +369,169 @@ const kovamindMemoryPlugin = {
     );
 
     // ========================================================================
+    // Vault v2 Tools
+    // ========================================================================
+
+    api.registerTool(
+      {
+        name: "vault_setup",
+        label: "Vault Setup",
+        description: "Set up the secrets vault. Returns recovery words — store them safely.",
+        parameters: Type.Object({
+          passphrase: Type.String({ description: "Vault passphrase (min 8 chars)", minLength: 8 }),
+        }),
+        async execute(_toolCallId: string, params: { passphrase: string }) {
+          const data = await request("POST", "/vault/v2/setup", { passphrase: params.passphrase });
+          return {
+            content: [{ type: "text", text: `Vault created. Recovery words: ${(data.recovery_words as string[]).join(", ")}` }],
+            details: { status: data.status, wordCount: (data.recovery_words as string[]).length },
+          };
+        },
+      },
+      { name: "vault_setup" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_unlock",
+        label: "Vault Unlock",
+        description: "Unlock the secrets vault with your passphrase.",
+        parameters: Type.Object({
+          passphrase: Type.String({ description: "Vault passphrase", minLength: 8 }),
+        }),
+        async execute(_toolCallId: string, params: { passphrase: string }) {
+          const data = await request("POST", "/vault/v2/unlock", { passphrase: params.passphrase });
+          return {
+            content: [{ type: "text", text: `Vault ${data.status}.` }],
+            details: { status: data.status },
+          };
+        },
+      },
+      { name: "vault_unlock" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_lock",
+        label: "Vault Lock",
+        description: "Lock the secrets vault. Zeros key from memory.",
+        parameters: Type.Object({}),
+        async execute() {
+          const data = await request("POST", "/vault/v2/lock", {});
+          return {
+            content: [{ type: "text", text: `Vault ${data.status}.` }],
+            details: { status: data.status },
+          };
+        },
+      },
+      { name: "vault_lock" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_store",
+        label: "Vault Store",
+        description: "Store a credential. You will never see the credential values — only the opaque handle.",
+        parameters: Type.Object({
+          label: Type.String({ description: "Label for the credential" }),
+          schema_type: Type.String({ description: "Type: username_password, api_key, api_key_pair, database, ssh_key, oauth, custom" }),
+          fields: Type.Record(Type.String(), Type.String(), { description: "Credential fields" }),
+          tags: Type.Optional(Type.String({ description: "Comma-separated tags" })),
+        }),
+        async execute(_toolCallId: string, params: { label: string; schema_type: string; fields: Record<string, string>; tags?: string }) {
+          const body: Record<string, unknown> = { label: params.label, schema_type: params.schema_type, fields: params.fields };
+          if (params.tags) body.tags = params.tags;
+          const data = await request("POST", "/vault/v2/credentials", body);
+          return {
+            content: [{ type: "text", text: `Stored "${data.label}" with handle: ${data.handle}` }],
+            details: { handle: data.handle, label: data.label },
+          };
+        },
+      },
+      { name: "vault_store" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_handles",
+        label: "Vault Handles",
+        description: "List available credential handles. You will never see the credential values.",
+        parameters: Type.Object({}),
+        async execute() {
+          const data = await request("GET", "/vault/v2/handles");
+          const handles = (data.handles ?? []) as Array<{ handle: string; label: string; schema_type: string }>;
+          if (handles.length === 0) {
+            return { content: [{ type: "text", text: "No credentials stored." }], details: { count: 0 } };
+          }
+          const text = handles.map((h, i) => `${i + 1}. [${h.schema_type}] ${h.label} (handle: ${h.handle})`).join("\n");
+          return {
+            content: [{ type: "text", text: `${handles.length} credential(s):\n${text}` }],
+            details: { count: handles.length, handles },
+          };
+        },
+      },
+      { name: "vault_handles" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_find",
+        label: "Vault Find",
+        description: "Find credentials matching a search query. You will never see credential values.",
+        parameters: Type.Object({
+          query: Type.String({ description: "Search query (e.g., 'GitHub login', 'API key')" }),
+        }),
+        async execute(_toolCallId: string, params: { query: string }) {
+          const data = await request("GET", `/vault/v2/find?q=${encodeURIComponent(params.query)}`);
+          const results = (data.results ?? []) as Array<{ handle: string; label: string; schema_type: string; score: number }>;
+          if (results.length === 0) {
+            return { content: [{ type: "text", text: "No matching credentials found." }], details: { count: 0 } };
+          }
+          const text = results.map((r, i) => `${i + 1}. [${r.schema_type}] ${r.label} (handle: ${r.handle}, score: ${r.score.toFixed(2)})`).join("\n");
+          return {
+            content: [{ type: "text", text: `Found ${results.length} match(es):\n${text}` }],
+            details: { count: results.length, results },
+          };
+        },
+      },
+      { name: "vault_find" },
+    );
+
+    api.registerTool(
+      {
+        name: "vault_execute",
+        label: "Vault Execute",
+        description: "Execute an action using a credential. The credential is never exposed to you.",
+        parameters: Type.Object({
+          handle: Type.String({ description: "Credential handle from vault_handles" }),
+          action: Type.String({ description: "Action: http_request or browser_fill" }),
+          target: Type.String({ description: "Target URL" }),
+          mapping: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Field mapping" })),
+          auto_detect: Type.Optional(Type.String({ description: "Query to auto-detect credential instead of handle" })),
+        }),
+        async execute(_toolCallId: string, params: { handle: string; action: string; target: string; mapping?: Record<string, string>; auto_detect?: string }) {
+          const body: Record<string, unknown> = { handle: params.handle, action: params.action, target: params.target };
+          if (params.mapping) body.mapping = params.mapping;
+          if (params.auto_detect) body.auto_detect = params.auto_detect;
+          const data = await request("POST", "/vault/v2/execute", body);
+          const success = data.success as boolean;
+          const output = (data.output as string) || "";
+          const error = data.error as string | null;
+
+          let text = success ? "Execution succeeded." : "Execution failed.";
+          if (error) text += ` Error: ${error}`;
+          if (output) text += `\n\n${output.slice(0, 2000)}`;
+
+          return {
+            content: [{ type: "text", text }],
+            details: { success, statusCode: data.status_code, error },
+          };
+        },
+      },
+      { name: "vault_execute" },
+    );
+
+        // ========================================================================
     // Lifecycle: Auto-Recall (before each agent turn)
     // ========================================================================
 
