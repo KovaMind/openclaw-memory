@@ -8,6 +8,8 @@ import kovamindMemoryPlugin, {
   looksLikePromptInjection,
   escapeForPrompt,
   formatMemoriesContext,
+  normalizePattern,
+  normalizePatterns,
 } from "../index";
 
 const ROOT = join(__dirname, "..");
@@ -211,6 +213,40 @@ describe("escapeForPrompt", () => {
 // FORMAT MEMORIES CONTEXT TESTS
 // ════════════════════════════════════════════════════════════════════
 
+describe("normalizePattern", () => {
+  it("maps pattern_id, content, pattern_type from API", () => {
+    const p = normalizePattern({
+      pattern_id: "17",
+      content: "likes dark mode",
+      pattern_type: "preference",
+      confidence: 0.9,
+    });
+    expect(p.id).toBe("17");
+    expect(p.pattern).toBe("likes dark mode");
+    expect(p.category).toBe("preference");
+    expect(p.confidence).toBe(0.9);
+  });
+
+  it("passes through legacy id, pattern, category", () => {
+    const p = normalizePattern({
+      id: "1",
+      pattern: "hello",
+      category: "fact",
+      confidence: 0.5,
+    });
+    expect(p.id).toBe("1");
+    expect(p.pattern).toBe("hello");
+    expect(p.category).toBe("fact");
+  });
+});
+
+describe("normalizePatterns", () => {
+  it("returns empty for non-array", () => {
+    expect(normalizePatterns(undefined)).toEqual([]);
+    expect(normalizePatterns({})).toEqual([]);
+  });
+});
+
 describe("formatMemoriesContext", () => {
   it("wraps in relevant-memories tags", () => {
     const result = formatMemoriesContext([
@@ -394,7 +430,14 @@ describe("tool: memory_recall", () => {
   it("returns patterns on success", async () => {
     vi.stubGlobal("fetch", mockFetch([{
       status: 200,
-      body: { patterns: [{ id: "1", pattern: "likes dark mode", category: "preference", confidence: 0.9, user_id: "test" }] },
+      body: {
+        patterns: [{
+          pattern_id: "1",
+          content: "likes dark mode",
+          pattern_type: "preference",
+          confidence: 0.9,
+        }],
+      },
     }]));
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
@@ -431,7 +474,14 @@ describe("tool: memory_store", () => {
   it("extracts and stores patterns", async () => {
     vi.stubGlobal("fetch", mockFetch([{
       status: 200,
-      body: { patterns: [{ id: "42", pattern: "prefers dark mode", category: "preference", confidence: 0.95 }] },
+      body: {
+        patterns: [{
+          pattern_id: "42",
+          content: "prefers dark mode",
+          pattern_type: "preference",
+          confidence: 0.95,
+        }],
+      },
     }]));
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
@@ -468,7 +518,7 @@ describe("tool: memory_forget", () => {
     kovamindMemoryPlugin.register(api);
     const result = await api._tools["memory_forget"].execute("tc1", { patternId: "42", reason: "wrong" });
     const body = JSON.parse(fetchCalls[0].init?.body as string);
-    expect(body.reinforcement_type).toBe("denied");
+    expect(body.reinforcement_type).toBe("contradicted");
     expect(body.pattern_id).toBe("42");
     expect(body.context).toBe("wrong");
     expect(result.content[0].text).toContain("denied");
@@ -536,6 +586,15 @@ describe("tool: memory_reinforce", () => {
     expect(body.reinforcement_type).toBe("confirmed");
     expect(result.content[0].text).toContain("confirmed");
   });
+
+  it("maps strengthened to confirmed for API", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { success: true } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["memory_reinforce"].execute("tc1", { patternId: "7", type: "strengthened" });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.reinforcement_type).toBe("confirmed");
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -549,7 +608,14 @@ describe("auto-recall hook", () => {
   it("injects memories into context", async () => {
     vi.stubGlobal("fetch", mockFetch([{
       status: 200,
-      body: { patterns: [{ id: "1", pattern: "likes dark mode", category: "preference", confidence: 0.9, user_id: "test" }] },
+      body: {
+        patterns: [{
+          pattern_id: "1",
+          content: "likes dark mode",
+          pattern_type: "preference",
+          confidence: 0.9,
+        }],
+      },
     }]));
     const api = createMockApi({ autoRecall: true });
     kovamindMemoryPlugin.register(api);
