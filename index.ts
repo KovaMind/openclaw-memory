@@ -19,13 +19,61 @@ interface KovaMindConfig {
   maxRecallPatterns?: number;
 }
 
-// API response types
+// API response types (normalized for tools / prompt injection)
 interface Pattern {
   id: string;
   pattern: string;
   category: string;
   confidence: number;
   user_id: string;
+}
+
+/** Map Kova Mind `PatternResponse` (`pattern_id`, `content`, `pattern_type`) to tool-facing shape. */
+export function normalizePattern(raw: Record<string, unknown>): Pattern {
+  const id =
+    (typeof raw.id === "string" && raw.id) ||
+    (typeof raw.pattern_id === "string" && raw.pattern_id) ||
+    "";
+  const pattern =
+    (typeof raw.pattern === "string" && raw.pattern) ||
+    (typeof raw.content === "string" && raw.content) ||
+    "";
+  const category =
+    (typeof raw.category === "string" && raw.category) ||
+    (typeof raw.pattern_type === "string" && raw.pattern_type) ||
+    "";
+  const confidence =
+    typeof raw.confidence === "number" && !Number.isNaN(raw.confidence)
+      ? raw.confidence
+      : 0;
+  const user_id =
+    (typeof raw.user_id === "string" && raw.user_id) || "";
+  return { id, pattern, category, confidence, user_id };
+}
+
+export function normalizePatterns(raw: unknown): Pattern[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) =>
+    normalizePattern(
+      item !== null && typeof item === "object"
+        ? (item as Record<string, unknown>)
+        : {},
+    ),
+  );
+}
+
+/** Server accepts only confirmed | contradicted | used (see ReinforcementType). */
+function mapReinforcementType(t: string): string {
+  switch (t) {
+    case "denied":
+      return "contradicted";
+    case "strengthened":
+      return "confirmed";
+    case "weakened":
+      return "contradicted";
+    default:
+      return t;
+  }
 }
 
 // ============================================================================
@@ -148,7 +196,9 @@ const kovamindMemoryPlugin = {
             min_confidence: 0.3,
           });
 
-          const patterns = (data.patterns ?? data.results ?? data.memories ?? []) as Pattern[];
+          const patterns = normalizePatterns(
+            data.patterns ?? data.results ?? data.memories,
+          );
 
           if (patterns.length === 0) {
             return {
@@ -213,7 +263,7 @@ const kovamindMemoryPlugin = {
             user_id: userId,
           });
 
-          const patterns = (data.patterns ?? data.results ?? []) as Pattern[];
+          const patterns = normalizePatterns(data.patterns ?? data.results);
 
           if (patterns.length === 0) {
             return {
@@ -268,7 +318,7 @@ const kovamindMemoryPlugin = {
 
           await request("POST", "/memory/reinforce", {
             pattern_id: patternId,
-            reinforcement_type: "denied",
+            reinforcement_type: mapReinforcementType("denied"),
             context: reason ?? "User requested removal",
           });
 
@@ -350,7 +400,7 @@ const kovamindMemoryPlugin = {
         ) {
           await request("POST", "/memory/reinforce", {
             pattern_id: params.patternId,
-            reinforcement_type: params.type,
+            reinforcement_type: mapReinforcementType(params.type),
             context: params.reason,
           });
 
@@ -547,7 +597,9 @@ const kovamindMemoryPlugin = {
             min_confidence: 0.3,
           });
 
-          const patterns = (data.patterns ?? data.results ?? data.memories ?? []) as Pattern[];
+          const patterns = normalizePatterns(
+            data.patterns ?? data.results ?? data.memories,
+          );
           if (patterns.length === 0) return;
 
           api.logger.info?.(
@@ -611,7 +663,7 @@ const kovamindMemoryPlugin = {
             user_id: userId,
           });
 
-          const patterns = (data.patterns ?? data.results ?? []) as Pattern[];
+          const patterns = normalizePatterns(data.patterns ?? data.results);
           if (patterns.length > 0) {
             api.logger.info?.(
               `memory-kovamind: auto-captured ${patterns.length} pattern(s)`,
@@ -662,7 +714,9 @@ const kovamindMemoryPlugin = {
               max_patterns: parseInt(opts.limit),
               min_confidence: 0.3,
             });
-            const patterns = (data.patterns ?? []) as Pattern[];
+            const patterns = normalizePatterns(
+              data.patterns ?? data.results ?? data.memories,
+            );
             if (patterns.length === 0) {
               console.log("No matching memories.");
               return;

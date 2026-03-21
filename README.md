@@ -63,6 +63,10 @@ openclaw gateway restart
 | **memory_surprise** | Agent tool — score how novel content is vs existing memory |
 | **memory_reinforce** | Agent tool — confirm or strengthen a validated pattern |
 
+### Vault tools (`vault_*`)
+
+The bundled vault helpers target a **v2-style** HTTP API (`/vault/v2/...`). The open-source Kova Mind server in this repo exposes a different vault surface under **`/vault`** (e.g. `POST /vault/unlock`, `POST /vault/secrets`). Those tools will **404** against a stock server until they are realigned to that API.
+
 ## Config Options
 
 | Option | Default | Description |
