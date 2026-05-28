@@ -108,7 +108,7 @@ const kovamindMemoryPlugin = {
 
   register(api: any) {
     const cfg = api.pluginConfig as KovaMindConfig;
-    const baseUrl = cfg.apiUrl ?? "https://api.kovamind.ai";
+    const baseUrl = cfg.apiUrl ?? "https://api.kovamind.io/api";
     const apiKey = cfg.apiKey;
     const userId = cfg.userId;
     const autoCapture = cfg.autoCapture ?? true;
