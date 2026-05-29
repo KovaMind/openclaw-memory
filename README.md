@@ -96,7 +96,7 @@ openclaw kovamind surprise "new info" # Score novelty
 
 ## Get an API key
 
-Sign up at [kovamind.ai](https://kovamind.io).
+Sign up at [kovamind.io](https://kovamind.io).
 
 ## License
 
