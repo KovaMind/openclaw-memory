@@ -1,18 +1,18 @@
 {
   "name": "@kovamind/openclaw-memory",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "OpenClaw memory plugin — Kova Mind as your agent's memory backend",
   "type": "module",
   "main": "index.ts",
   "files": ["index.ts", "openclaw.plugin.json"],
   "keywords": ["openclaw", "memory", "ai", "agents", "kovamind", "plugin"],
-  "author": "Kova Mind <hello@kovamind.ai>",
+  "author": "Kova Mind <hello@kovamind.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/KovaMind/openclaw-memory.git"
   },
-  "homepage": "https://kovamind.ai",
+  "homepage": "https://kovamind.io",
   "peerDependencies": {
     "openclaw": ">=2026.3.2"
   },

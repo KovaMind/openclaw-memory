@@ -108,7 +108,7 @@ const kovamindMemoryPlugin = {
 
   register(api: any) {
     const cfg = api.pluginConfig as KovaMindConfig;
-    const baseUrl = cfg.apiUrl ?? "https://api.kovamind.ai";
+    const baseUrl = cfg.apiUrl ?? "https://api.kovamind.io";
     const apiKey = cfg.apiKey;
     const userId = cfg.userId;
     const autoCapture = cfg.autoCapture ?? true;
@@ -141,7 +141,7 @@ const kovamindMemoryPlugin = {
         async execute(_toolCallId: string, params: { query: string; limit?: number }) {
           const { query, limit = maxPatterns } = params;
 
-          const data = await request("POST", "/memory/retrieve", {
+          const data = await request("POST", "/api/memory/retrieve", {
             context: query,
             user_id: userId,
             max_patterns: limit,
@@ -208,7 +208,7 @@ const kovamindMemoryPlugin = {
             };
           }
 
-          const data = await request("POST", "/memory/extract", {
+          const data = await request("POST", "/api/memory/extract", {
             conversation: [{ role: "user", content: text }],
             user_id: userId,
           });
@@ -266,7 +266,7 @@ const kovamindMemoryPlugin = {
         ) {
           const { patternId, reason } = params;
 
-          await request("POST", "/memory/reinforce", {
+          await request("POST", "/api/memory/reinforce", {
             pattern_id: patternId,
             reinforcement_type: "denied",
             context: reason ?? "User requested removal",
@@ -295,7 +295,7 @@ const kovamindMemoryPlugin = {
           content: Type.String({ description: "Content to evaluate" }),
         }),
         async execute(_toolCallId: string, params: { content: string }) {
-          const data = await request("POST", "/memory/surprise", {
+          const data = await request("POST", "/api/memory/surprise", {
             content: params.content,
             user_id: userId,
           });
@@ -348,7 +348,7 @@ const kovamindMemoryPlugin = {
           _toolCallId: string,
           params: { patternId: string; type: string; reason?: string },
         ) {
-          await request("POST", "/memory/reinforce", {
+          await request("POST", "/api/memory/reinforce", {
             pattern_id: params.patternId,
             reinforcement_type: params.type,
             context: params.reason,
@@ -381,7 +381,7 @@ const kovamindMemoryPlugin = {
           passphrase: Type.String({ description: "Vault passphrase (min 8 chars)", minLength: 8 }),
         }),
         async execute(_toolCallId: string, params: { passphrase: string }) {
-          const data = await request("POST", "/vault/v2/setup", { passphrase: params.passphrase });
+          const data = await request("POST", "/api/vault/v2/setup", { passphrase: params.passphrase });
           return {
             content: [{ type: "text", text: `Vault created. Recovery words: ${(data.recovery_words as string[]).join(", ")}` }],
             details: { status: data.status, wordCount: (data.recovery_words as string[]).length },
@@ -400,7 +400,7 @@ const kovamindMemoryPlugin = {
           passphrase: Type.String({ description: "Vault passphrase", minLength: 8 }),
         }),
         async execute(_toolCallId: string, params: { passphrase: string }) {
-          const data = await request("POST", "/vault/v2/unlock", { passphrase: params.passphrase });
+          const data = await request("POST", "/api/vault/v2/unlock", { passphrase: params.passphrase });
           return {
             content: [{ type: "text", text: `Vault ${data.status}.` }],
             details: { status: data.status },
@@ -417,7 +417,7 @@ const kovamindMemoryPlugin = {
         description: "Lock the secrets vault. Zeros key from memory.",
         parameters: Type.Object({}),
         async execute() {
-          const data = await request("POST", "/vault/v2/lock", {});
+          const data = await request("POST", "/api/vault/v2/lock", {});
           return {
             content: [{ type: "text", text: `Vault ${data.status}.` }],
             details: { status: data.status },
@@ -441,7 +441,7 @@ const kovamindMemoryPlugin = {
         async execute(_toolCallId: string, params: { label: string; schema_type: string; fields: Record<string, string>; tags?: string }) {
           const body: Record<string, unknown> = { label: params.label, schema_type: params.schema_type, fields: params.fields };
           if (params.tags) body.tags = params.tags;
-          const data = await request("POST", "/vault/v2/credentials", body);
+          const data = await request("POST", "/api/vault/v2/credentials", body);
           return {
             content: [{ type: "text", text: `Stored "${data.label}" with handle: ${data.handle}` }],
             details: { handle: data.handle, label: data.label },
@@ -458,7 +458,7 @@ const kovamindMemoryPlugin = {
         description: "List available credential handles. You will never see the credential values.",
         parameters: Type.Object({}),
         async execute() {
-          const data = await request("GET", "/vault/v2/handles");
+          const data = await request("GET", "/api/vault/v2/handles");
           const handles = (data.handles ?? []) as Array<{ handle: string; label: string; schema_type: string }>;
           if (handles.length === 0) {
             return { content: [{ type: "text", text: "No credentials stored." }], details: { count: 0 } };
@@ -482,7 +482,7 @@ const kovamindMemoryPlugin = {
           query: Type.String({ description: "Search query (e.g., 'GitHub login', 'API key')" }),
         }),
         async execute(_toolCallId: string, params: { query: string }) {
-          const data = await request("GET", `/vault/v2/find?q=${encodeURIComponent(params.query)}`);
+          const data = await request("GET", `/api/vault/v2/find?q=${encodeURIComponent(params.query)}`);
           const results = (data.results ?? []) as Array<{ handle: string; label: string; schema_type: string; score: number }>;
           if (results.length === 0) {
             return { content: [{ type: "text", text: "No matching credentials found." }], details: { count: 0 } };
@@ -513,7 +513,7 @@ const kovamindMemoryPlugin = {
           const body: Record<string, unknown> = { handle: params.handle, action: params.action, target: params.target };
           if (params.mapping) body.mapping = params.mapping;
           if (params.auto_detect) body.auto_detect = params.auto_detect;
-          const data = await request("POST", "/vault/v2/execute", body);
+          const data = await request("POST", "/api/vault/v2/execute", body);
           const success = data.success as boolean;
           const output = (data.output as string) || "";
           const error = data.error as string | null;
@@ -540,7 +540,7 @@ const kovamindMemoryPlugin = {
         if (!event.prompt || event.prompt.length < 5) return;
 
         try {
-          const data = await request("POST", "/memory/retrieve", {
+          const data = await request("POST", "/api/memory/retrieve", {
             context: event.prompt,
             user_id: userId,
             max_patterns: maxPatterns,
@@ -606,7 +606,7 @@ const kovamindMemoryPlugin = {
           if (userMessages.length === 0) return;
 
           // Send the conversation to Kova Mind for extraction
-          const data = await request("POST", "/memory/extract", {
+          const data = await request("POST", "/api/memory/extract", {
             conversation: userMessages.slice(0, 10), // cap at 10 messages
             user_id: userId,
           });
@@ -656,7 +656,7 @@ const kovamindMemoryPlugin = {
           .argument("<query>", "Search query")
           .option("--limit <n>", "Max results", "5")
           .action(async (query: string, opts: { limit: string }) => {
-            const data = await request("POST", "/memory/retrieve", {
+            const data = await request("POST", "/api/memory/retrieve", {
               context: query,
               user_id: userId,
               max_patterns: parseInt(opts.limit),
@@ -679,7 +679,7 @@ const kovamindMemoryPlugin = {
           .description("Score content novelty")
           .argument("<content>", "Content to evaluate")
           .action(async (content: string) => {
-            const data = await request("POST", "/memory/surprise", {
+            const data = await request("POST", "/api/memory/surprise", {
               content,
               user_id: userId,
             });

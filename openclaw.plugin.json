@@ -15,7 +15,7 @@
     },
     "apiUrl": {
       "label": "API URL",
-      "placeholder": "https://api.kovamind.ai",
+      "placeholder": "https://api.kovamind.io",
       "help": "Kova Mind API base URL",
       "advanced": true
     },
@@ -46,7 +46,7 @@
       },
       "apiUrl": {
         "type": "string",
-        "default": "https://api.kovamind.ai"
+        "default": "https://api.kovamind.io"
       },
       "autoCapture": {
         "type": "boolean",

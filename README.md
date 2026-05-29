@@ -1,6 +1,6 @@
 # @kovamind/openclaw-memory
 
-OpenClaw memory plugin — use [Kova Mind](https://kovamind.ai) as your agent's memory backend.
+OpenClaw memory plugin — use [Kova Mind](https://kovamind.io) as your agent's memory backend.
 
 Replaces OpenClaw's local file-based memory with Kova Mind's cloud API. Your agent gets persistent, learning memory with pattern extraction, surprise scoring, and reinforcement — no local embeddings or SQLite needed.
 
@@ -69,7 +69,7 @@ openclaw gateway restart
 |--------|---------|-------------|
 | `apiKey` | required | Your `km_live_xxx` API key |
 | `userId` | required | Default user ID for memory operations |
-| `apiUrl` | `https://api.kovamind.ai` | API base URL |
+| `apiUrl` | `https://api.kovamind.io` | API base URL |
 | `autoRecall` | `true` | Inject memories before each turn |
 | `autoCapture` | `true` | Extract patterns after each turn |
 | `maxRecallPatterns` | `5` | Max memories injected per turn |
@@ -96,7 +96,7 @@ openclaw kovamind surprise "new info" # Score novelty
 
 ## Get an API key
 
-Sign up at [kovamind.ai](https://kovamind.ai).
+Sign up at [kovamind.io](https://kovamind.io).
 
 ## License
 
