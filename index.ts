@@ -28,6 +28,25 @@ interface Pattern {
   user_id: string;
 }
 
+/**
+ * The Kova Mind API returns memory records as
+ * { pattern_id, content, pattern_type, confidence, user_id }, but the rest of
+ * this plugin reads the canonical { id, pattern, category, ... } shape. Reading
+ * the wrong names yielded `undefined`, which crashed auto-recall inside
+ * escapeForPrompt(undefined) -> "Cannot read properties of undefined (reading 'replace')",
+ * silently disabling memory injection. Normalising at every parse site fixes
+ * recall, the agent tools, and the CLI. Accepts either naming for compatibility.
+ */
+export function toPattern(raw: Record<string, unknown>): Pattern {
+  return {
+    id: String(raw.id ?? raw.pattern_id ?? ""),
+    pattern: String(raw.pattern ?? raw.content ?? ""),
+    category: String(raw.category ?? raw.pattern_type ?? "memory"),
+    confidence: typeof raw.confidence === "number" ? raw.confidence : 0,
+    user_id: String(raw.user_id ?? ""),
+  };
+}
+
 // ============================================================================
 // HTTP Client
 // ============================================================================
@@ -81,7 +100,7 @@ export function looksLikePromptInjection(text: string): boolean {
 }
 
 export function escapeForPrompt(text: string): string {
-  return text
+  return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -148,7 +167,7 @@ const kovamindMemoryPlugin = {
             min_confidence: 0.3,
           });
 
-          const patterns = (data.patterns ?? data.results ?? data.memories ?? []) as Pattern[];
+          const patterns = ((data.patterns ?? data.results ?? data.memories ?? []) as Array<Record<string, unknown>>).map(toPattern);
 
           if (patterns.length === 0) {
             return {
@@ -213,7 +232,7 @@ const kovamindMemoryPlugin = {
             user_id: userId,
           });
 
-          const patterns = (data.patterns ?? data.results ?? []) as Pattern[];
+          const patterns = ((data.patterns ?? data.results ?? []) as Array<Record<string, unknown>>).map(toPattern);
 
           if (patterns.length === 0) {
             return {
@@ -547,7 +566,7 @@ const kovamindMemoryPlugin = {
             min_confidence: 0.3,
           });
 
-          const patterns = (data.patterns ?? data.results ?? data.memories ?? []) as Pattern[];
+          const patterns = ((data.patterns ?? data.results ?? data.memories ?? []) as Array<Record<string, unknown>>).map(toPattern);
           if (patterns.length === 0) return;
 
           api.logger.info?.(
@@ -611,7 +630,7 @@ const kovamindMemoryPlugin = {
             user_id: userId,
           });
 
-          const patterns = (data.patterns ?? data.results ?? []) as Pattern[];
+          const patterns = ((data.patterns ?? data.results ?? []) as Array<Record<string, unknown>>).map(toPattern);
           if (patterns.length > 0) {
             api.logger.info?.(
               `memory-kovamind: auto-captured ${patterns.length} pattern(s)`,
@@ -662,7 +681,7 @@ const kovamindMemoryPlugin = {
               max_patterns: parseInt(opts.limit),
               min_confidence: 0.3,
             });
-            const patterns = (data.patterns ?? []) as Pattern[];
+            const patterns = ((data.patterns ?? []) as Array<Record<string, unknown>>).map(toPattern);
             if (patterns.length === 0) {
               console.log("No matching memories.");
               return;
