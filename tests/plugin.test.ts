@@ -8,6 +8,7 @@ import kovamindMemoryPlugin, {
   looksLikePromptInjection,
   escapeForPrompt,
   formatMemoriesContext,
+  toPattern,
 } from "../index";
 
 const ROOT = join(__dirname, "..");
@@ -1299,5 +1300,53 @@ describe("source code validation", () => {
   });
   it("uses HTTPS default URL", () => {
     expect(src).toContain('"https://api.kovamind.ai"');
+  });
+});
+
+
+describe("toPattern() — Kova API field mapping (recall-crash regression)", () => {
+  it("maps real API fields (pattern_id/content/pattern_type) to the canonical shape", () => {
+    const p = toPattern({
+      pattern_id: "140",
+      pattern_type: "preference",
+      content: "programming language [positive] — Favorite is Rust.",
+      confidence: 0.4,
+      user_id: "alice",
+    });
+    expect(p.id).toBe("140");
+    expect(p.category).toBe("preference");
+    expect(p.pattern).toBe("programming language [positive] — Favorite is Rust.");
+    expect(p.confidence).toBeCloseTo(0.4);
+  });
+
+  it("still accepts canonical field names (pattern/category/id)", () => {
+    const p = toPattern({ id: "1", pattern: "x", category: "fact", confidence: 0.9, user_id: "u" });
+    expect(p.pattern).toBe("x");
+    expect(p.category).toBe("fact");
+  });
+
+  it("never yields undefined fields", () => {
+    const p = toPattern({});
+    expect(p.pattern).toBe("");
+    expect(p.category).toBe("memory");
+    expect(() => formatMemoriesContext([p])).not.toThrow();
+  });
+
+  it("formatMemoriesContext renders API-shaped patterns end-to-end (the bug)", () => {
+    const patterns = [
+      { pattern_id: "1", pattern_type: "preference", content: "Coffee: black, no sugar.", confidence: 0.5, user_id: "alice" },
+    ].map(toPattern);
+    const out = formatMemoriesContext(patterns);
+    expect(out).toContain("Coffee: black, no sugar.");
+    expect(out).toContain("[preference]");
+  });
+});
+
+describe("escapeForPrompt() — null safety", () => {
+  it("does not throw on undefined/null input", () => {
+    // @ts-expect-error intentionally passing undefined to prove the guard
+    expect(() => escapeForPrompt(undefined)).not.toThrow();
+    // @ts-expect-error intentionally passing null
+    expect(escapeForPrompt(null)).toBe("");
   });
 });
