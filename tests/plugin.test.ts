@@ -50,7 +50,7 @@ function createMockApi(config: Record<string, any> = {}) {
     pluginConfig: {
       apiKey: "km_test_fake",
       userId: "test-user",
-      apiUrl: "https://api.kovamind.ai",
+      apiUrl: "https://api.kovamind.io",
       autoCapture: true,
       autoRecall: true,
       maxRecallPatterns: 5,
@@ -119,11 +119,22 @@ describe("openclaw.plugin.json", () => {
     expect(manifest.uiHints.apiKey.sensitive).toBe(true);
   });
   it("has apiUrl default", () => {
-    expect(manifest.configSchema.properties.apiUrl.default).toBe("https://api.kovamind.ai");
+    expect(manifest.configSchema.properties.apiUrl.default).toBe("https://api.kovamind.io");
   });
   it("has maxRecallPatterns bounds", () => {
     expect(manifest.configSchema.properties.maxRecallPatterns.minimum).toBe(1);
     expect(manifest.configSchema.properties.maxRecallPatterns.maximum).toBe(20);
+  });
+  it("declares all 12 registered tools in contracts.tools", () => {
+    // Runtime >=2026.x rejects api.registerTool for any name not listed in
+    // manifest.contracts.tools. Keep this in lockstep with index.ts registrations.
+    const expected = [
+      "memory_recall", "memory_store", "memory_forget", "memory_surprise",
+      "memory_reinforce", "vault_setup", "vault_unlock", "vault_lock",
+      "vault_store", "vault_handles", "vault_find", "vault_execute",
+    ];
+    expect(manifest.contracts.tools).toHaveLength(expected.length);
+    for (const name of expected) expect(manifest.contracts.tools).toContain(name);
   });
   it("disallows additional properties", () => {
     expect(manifest.configSchema.additionalProperties).toBe(false);
@@ -250,39 +261,39 @@ describe("apiRequest", () => {
 
   it("sends Bearer token", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { status: "ok" } }]));
-    await apiRequest("https://api.kovamind.ai", "km_test_123", "GET", "/health");
+    await apiRequest("https://api.kovamind.io", "km_test_123", "GET", "/health");
     const headers = fetchCalls[0].init?.headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer km_test_123");
   });
 
   it("sends JSON content type", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: {} }]));
-    await apiRequest("https://api.kovamind.ai", "key", "POST", "/memory/extract", { test: true });
+    await apiRequest("https://api.kovamind.io", "key", "POST", "/memory/extract", { test: true });
     const headers = fetchCalls[0].init?.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/json");
   });
 
   it("serializes body as JSON", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: {} }]));
-    await apiRequest("https://api.kovamind.ai", "key", "POST", "/test", { foo: "bar" });
+    await apiRequest("https://api.kovamind.io", "key", "POST", "/test", { foo: "bar" });
     expect(fetchCalls[0].init?.body).toBe('{"foo":"bar"}');
   });
 
   it("strips trailing slashes from baseUrl", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: {} }]));
-    await apiRequest("https://api.kovamind.ai///", "key", "GET", "/health");
-    expect(fetchCalls[0].url).toBe("https://api.kovamind.ai/health");
+    await apiRequest("https://api.kovamind.io///", "key", "GET", "/health");
+    expect(fetchCalls[0].url).toBe("https://api.kovamind.io/health");
   });
 
   it("throws on non-ok response", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 500, body: { detail: "Internal error" } }]));
-    await expect(apiRequest("https://api.kovamind.ai", "key", "GET", "/health")).rejects.toThrow("Kova Mind API 500");
+    await expect(apiRequest("https://api.kovamind.io", "key", "GET", "/health")).rejects.toThrow("Kova Mind API 500");
   });
 
   it("truncates error text to 200 chars", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 500, body: { detail: "A".repeat(500) } }]));
     try {
-      await apiRequest("https://api.kovamind.ai", "key", "GET", "/health");
+      await apiRequest("https://api.kovamind.io", "key", "GET", "/health");
     } catch (err: any) {
       expect(err.message.length).toBeLessThanOrEqual(250); // "Kova Mind API 500: " + 200
     }
@@ -290,7 +301,7 @@ describe("apiRequest", () => {
 
   it("does not send body for GET requests", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: {} }]));
-    await apiRequest("https://api.kovamind.ai", "key", "GET", "/health");
+    await apiRequest("https://api.kovamind.io", "key", "GET", "/health");
     expect(fetchCalls[0].init?.body).toBeUndefined();
   });
 });
@@ -859,7 +870,7 @@ describe("security: SSRF via apiUrl", () => {
     const api = createMockApi({ apiUrl: "http://169.254.169.254" });
     kovamindMemoryPlugin.register(api);
     await api._tools["memory_recall"].execute("tc1", { query: "test" });
-    expect(fetchCalls[0].url).toBe("http://169.254.169.254/memory/retrieve");
+    expect(fetchCalls[0].url).toBe("http://169.254.169.254/api/memory/retrieve");
   });
 });
 
@@ -1299,7 +1310,7 @@ describe("source code validation", () => {
     expect(src).not.toMatch(/logger\.\w+\(.*apiKey/);
   });
   it("uses HTTPS default URL", () => {
-    expect(src).toContain('"https://api.kovamind.ai"');
+    expect(src).toContain('"https://api.kovamind.io"');
   });
 });
 
