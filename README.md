@@ -82,6 +82,29 @@ openclaw kovamind search "dark mode"  # Search memories
 openclaw kovamind surprise "new info" # Score novelty
 ```
 
+## Errors
+
+| Status | Meaning | What to do |
+|--------|---------|------------|
+| `401` | Missing or invalid API key | Check your `km_live_xxx` key. The key is sent as `Authorization: Bearer <key>` — `X-API-Key` is not accepted. |
+| `403` `{"detail":"API key is bound to a different agent identity"}` | The API key is **bound** server-side to a single `user_id`, and your request's `userId` does not match it. | Use the `userId` the key was bound to, or use an unbound key. See below. |
+
+### Bound API keys (`403`)
+
+An API key can be **bound** server-side to a single agent identity (`user_id`).
+This is enforced by the Kova Mind API, not by this plugin:
+
+- **Bound key** — every request must use the key's bound `user_id`. If the
+  configured `userId` differs, the API rejects the request with
+  `403 {"detail":"API key is bound to a different agent identity"}`. The plugin
+  surfaces this as `Kova Mind API 403: ...`; auto-recall/auto-capture log a
+  warning and skip silently, and the agent tools return the error text.
+- **Unbound key** — the client-supplied `userId` is passed through unchanged, so
+  a single key can serve multiple identities.
+
+If you hit this `403`, set `userId` to the identity the key was minted for (one
+agent = one bound key is the recommended pattern), or request an unbound key.
+
 ## How It Compares
 
 | Feature | memory-core | memory-lancedb | memory-kovamind |
