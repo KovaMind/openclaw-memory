@@ -54,6 +54,12 @@
       "placeholder": "spark",
       "help": "Which machine this gateway runs on. Stamped on stored memories and shown on recalled ones, so an agent can tell where a memory came from.",
       "advanced": true
+    },
+    "tokenBudget": {
+      "label": "Token Budget",
+      "placeholder": "2000",
+      "help": "Token allowance for tiered recall, split across core/active/contextual/background. Ignored when the server has tiers disabled.",
+      "advanced": true
     }
   },
   "configSchema": {
@@ -87,8 +93,17 @@
       "source": {
         "type": "string",
         "maxLength": 64
+      },
+      "tokenBudget": {
+        "type": "number",
+        "minimum": 100,
+        "maximum": 10000,
+        "default": 2000
       }
     },
-    "required": ["apiKey", "userId"]
+    "required": [
+      "apiKey",
+      "userId"
+    ]
   }
 }
