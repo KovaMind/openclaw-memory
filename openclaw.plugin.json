@@ -48,6 +48,12 @@
       "placeholder": "5",
       "help": "Maximum memories to inject per turn",
       "advanced": true
+    },
+    "source": {
+      "label": "Deployment Name",
+      "placeholder": "spark",
+      "help": "Which machine this gateway runs on. Stamped on stored memories and shown on recalled ones, so an agent can tell where a memory came from.",
+      "advanced": true
     }
   },
   "configSchema": {
@@ -77,6 +83,10 @@
         "minimum": 1,
         "maximum": 20,
         "default": 5
+      },
+      "source": {
+        "type": "string",
+        "maxLength": 64
       }
     },
     "required": ["apiKey", "userId"]

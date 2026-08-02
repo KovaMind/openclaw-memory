@@ -249,6 +249,66 @@ describe("formatMemoriesContext", () => {
     ]);
     expect(result).toContain("85%");
   });
+
+  // ── attribution ──────────────────────────────────────────────────
+  // Once an agent can read a teammate's memories, an unlabelled list makes it
+  // report work it never did as its own. These pin the labelling down.
+
+  it("marks the viewer's own memories as theirs", () => {
+    const result = formatMemoriesContext(
+      [{ id: "1", pattern: "disk is full", category: "fact", confidence: 0.5, user_id: "rock" }],
+      "rock",
+    );
+    // Assert on the memory LINE — the header always mentions "learned by"
+    // as part of its instruction to the agent.
+    const line = result.split("\n").find((l) => l.startsWith("1."))!;
+    expect(line).toContain("(yours)");
+    expect(line).not.toContain("learned by");
+  });
+
+  it("names the teammate a memory was learned by", () => {
+    const result = formatMemoriesContext(
+      [{ id: "1", pattern: "cert expires soon", category: "fact", confidence: 0.5, user_id: "cipher" }],
+      "rock",
+    );
+    expect(result).toContain("(learned by cipher)");
+    expect(result).not.toContain("(yours)");
+  });
+
+  it("tells the agent to treat another agent's memory as a briefing", () => {
+    const result = formatMemoriesContext([], "rock");
+    expect(result).toContain("belongs to another agent");
+    expect(result).toContain("not as something you did yourself");
+  });
+
+  it("labels which deployment a memory came from", () => {
+    const result = formatMemoriesContext(
+      [{ id: "1", pattern: "port 9100", category: "fact", confidence: 0.5, user_id: "rock" }],
+      "rock",
+      "spark",
+    );
+    expect(result).toContain("[on spark]");
+  });
+
+  it("omits attribution rather than guessing when the owner is unknown", () => {
+    const result = formatMemoriesContext(
+      [{ id: "1", pattern: "orphan memory", category: "fact", confidence: 0.5, user_id: "" }],
+      "rock",
+    );
+    const line = result.split("\n").find((l) => l.startsWith("1."))!;
+    expect(line).not.toContain("(yours)");
+    expect(line).not.toContain("learned by");
+    expect(line).toContain("orphan memory");
+  });
+
+  it("escapes a hostile owner name", () => {
+    const result = formatMemoriesContext(
+      [{ id: "1", pattern: "x", category: "fact", confidence: 0.5, user_id: "<script>evil</script>" }],
+      "rock",
+    );
+    expect(result).not.toContain("<script>");
+    expect(result).toContain("&lt;script&gt;");
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
