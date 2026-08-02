@@ -9,6 +9,8 @@ import kovamindMemoryPlugin, {
   escapeForPrompt,
   formatMemoriesContext,
   toPattern,
+  formatTieredContext,
+  collectWarnings,
 } from "../index";
 
 const ROOT = join(__dirname, "..");
@@ -1419,5 +1421,122 @@ describe("escapeForPrompt() — null safety", () => {
     expect(() => escapeForPrompt(undefined)).not.toThrow();
     // @ts-expect-error intentionally passing null
     expect(escapeForPrompt(null)).toBe("");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// TIERED RECALL + DOUBT SIGNALS
+// ════════════════════════════════════════════════════════════════════
+
+describe("formatTieredContext", () => {
+  const mk = (id: string, text: string, owner: string, extra: any = {}) =>
+    ({ id, pattern: text, category: "fact", confidence: 0.5, user_id: owner, ...extra }) as any;
+
+  it("keeps tiers in priority order regardless of object key order", () => {
+    const out = formatTieredContext(
+      { background: [mk("3", "bg", "rock")], core: [mk("1", "identity", "rock")], active: [mk("2", "now", "rock")] },
+      "rock",
+    );
+    const iCore = out.indexOf("Who you are");
+    const iActive = out.indexOf("What you are working on");
+    const iBg = out.indexOf("Background");
+    expect(iCore).toBeGreaterThan(-1);
+    expect(iCore).toBeLessThan(iActive);
+    expect(iActive).toBeLessThan(iBg);
+  });
+
+  it("numbers continuously across tiers", () => {
+    const out = formatTieredContext(
+      { core: [mk("1", "a", "rock")], active: [mk("2", "b", "rock"), mk("3", "c", "rock")] },
+      "rock",
+    );
+    expect(out).toContain("1. ");
+    expect(out).toContain("2. ");
+    expect(out).toContain("3. ");
+  });
+
+  it("omits empty tiers rather than printing bare headings", () => {
+    const out = formatTieredContext({ core: [], active: [mk("1", "only", "rock")], contextual: [] }, "rock");
+    expect(out).not.toContain("Who you are");
+    expect(out).not.toContain("Relevant to this question");
+    expect(out).toContain("What you are working on");
+  });
+
+  it("returns empty string when every tier is empty", () => {
+    expect(formatTieredContext({ core: [], active: [] }, "rock")).toBe("");
+  });
+
+  it("carries attribution into tiered output", () => {
+    const out = formatTieredContext({ active: [mk("1", "cert expires", "cipher")] }, "rock");
+    expect(out).toContain("(learned by cipher)");
+  });
+});
+
+describe("memory reliability signals", () => {
+  it("flags a memory the server marked rusty", () => {
+    const out = formatMemoriesContext(
+      [{ id: "1", pattern: "old fact", category: "fact", confidence: 0.5, user_id: "rock", memory_state: "rusty" } as any],
+      "rock",
+    );
+    expect(out).toContain("<rusty>");
+  });
+
+  it("does not clutter active memories with a state marker", () => {
+    const out = formatMemoriesContext(
+      [{ id: "1", pattern: "fresh", category: "fact", confidence: 0.5, user_id: "rock", memory_state: "active" } as any],
+      "rock",
+    );
+    expect(out).not.toContain("<active>");
+  });
+
+  it("shows how many times a memory has been confirmed", () => {
+    const out = formatMemoriesContext(
+      [{ id: "1", pattern: "repeated", category: "fact", confidence: 0.5, user_id: "rock", reinforcement_count: 4 } as any],
+      "rock",
+    );
+    expect(out).toContain("confirmed 4x");
+  });
+
+  it("stays quiet about a memory seen only once", () => {
+    const out = formatMemoriesContext(
+      [{ id: "1", pattern: "once", category: "fact", confidence: 0.5, user_id: "rock", reinforcement_count: 1 } as any],
+      "rock",
+    );
+    expect(out).not.toContain("confirmed");
+  });
+});
+
+describe("collectWarnings", () => {
+  it("reads the server's confidence warnings in plain words", () => {
+    const w = collectWarnings({
+      confidence_warnings: [{ type: "conflicting_information", recommendation: "merge_duplicates" }],
+    });
+    expect(w).toEqual(["conflicting information — suggested: merge duplicates"]);
+  });
+
+  it("gathers conflicts and stale flags too", () => {
+    const w = collectWarnings({
+      conflicts: [{ summary: "two ports recorded" }],
+      stale_flags: [{ reason: "not seen in 90 days" }],
+    });
+    expect(w).toHaveLength(2);
+    expect(w[0]).toContain("two ports recorded");
+    expect(w[1]).toContain("not seen in 90 days");
+  });
+
+  it("returns nothing when the server raised nothing", () => {
+    expect(collectWarnings({})).toEqual([]);
+  });
+
+  it("puts warnings in the injected block with an instruction to speak up", () => {
+    const out = formatMemoriesContext(
+      [{ id: "1", pattern: "x", category: "fact", confidence: 0.5, user_id: "rock" } as any],
+      "rock",
+      undefined,
+      ["conflicting information"],
+    );
+    expect(out).toContain("Before relying on the above");
+    expect(out).toContain("conflicting information");
+    expect(out).toContain("Say so plainly");
   });
 });
