@@ -90,6 +90,18 @@ export async function apiRequest(
 }
 
 // ============================================================================
+// Reinforcement type mapping — plugin ⇢ server enum
+// Plugin side sends: denied | strengthened | weakened
+// Server enum accepts: confirmed | contradicted | used
+// ============================================================================
+
+const REINFORCEMENT_MAP: Record<string, string> = {
+  denied: "contradicted",
+  strengthened: "confirmed",
+  weakened: "contradicted",
+};
+
+// ============================================================================
 // Prompt injection guard (ported from memory-lancedb)
 // ============================================================================
 
@@ -410,7 +422,7 @@ const kovamindMemoryPlugin = {
 
           await request("POST", "/api/memory/reinforce", {
             pattern_id: patternId,
-            reinforcement_type: "denied",
+            reinforcement_type: REINFORCEMENT_MAP["denied"],
             context: reason ?? "User requested removal",
           });
 
@@ -492,7 +504,7 @@ const kovamindMemoryPlugin = {
         ) {
           await request("POST", "/api/memory/reinforce", {
             pattern_id: params.patternId,
-            reinforcement_type: params.type,
+            reinforcement_type: REINFORCEMENT_MAP[params.type] ?? params.type,
             context: params.reason,
           });
 

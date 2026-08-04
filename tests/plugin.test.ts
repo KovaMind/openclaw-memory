@@ -536,13 +536,13 @@ describe("tool: memory_forget", () => {
   beforeEach(() => { fetchCalls = []; });
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it("sends denied reinforcement", async () => {
+  it("sends denied → contradicted reinforcement", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { success: true } }]));
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
     const result = await api._tools["memory_forget"].execute("tc1", { patternId: "42", reason: "wrong" });
     const body = JSON.parse(fetchCalls[0].init?.body as string);
-    expect(body.reinforcement_type).toBe("denied");
+    expect(body.reinforcement_type).toBe("contradicted");
     expect(body.pattern_id).toBe("42");
     expect(body.context).toBe("wrong");
     expect(result.content[0].text).toContain("denied");
@@ -601,7 +601,7 @@ describe("tool: memory_reinforce", () => {
   beforeEach(() => { fetchCalls = []; });
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it("sends confirmed reinforcement", async () => {
+  it("sends confirmed reinforcement (passthrough)", async () => {
     vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { success: true } }]));
     const api = createMockApi();
     kovamindMemoryPlugin.register(api);
@@ -609,6 +609,32 @@ describe("tool: memory_reinforce", () => {
     const body = JSON.parse(fetchCalls[0].init?.body as string);
     expect(body.reinforcement_type).toBe("confirmed");
     expect(result.content[0].text).toContain("confirmed");
+  });
+
+  it("maps strengthened → confirmed to server", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { success: true } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["memory_reinforce"].execute("tc1", { patternId: "42", type: "strengthened" });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.reinforcement_type).toBe("confirmed");
+  });
+
+  // NOTE: The backend `used` reinforcement type INCREASES confidence
+  // slightly (+0.05, citation-tracking semantics — see
+  // src/memory/api/endpoints_retrieve.py and mind/scripts/e2e_staging_test.py
+  // in the kova server repo: "contradicted" -0.15, "confirmed" +0.1, "used"
+  // +0.05). "weakened" is the plugin's semantic opposite of "strengthened"
+  // (see README: "confirm/deny/strengthen/weaken") and must therefore DECREASE
+  // confidence — i.e. map to "contradicted", the same target as "denied".
+  // Mapping it to "used" does the opposite of what the caller asked for.
+  it("maps weakened → contradicted to server (weaken must decrease confidence, not increase it)", async () => {
+    vi.stubGlobal("fetch", mockFetch([{ status: 200, body: { success: true } }]));
+    const api = createMockApi();
+    kovamindMemoryPlugin.register(api);
+    await api._tools["memory_reinforce"].execute("tc1", { patternId: "42", type: "weakened" });
+    const body = JSON.parse(fetchCalls[0].init?.body as string);
+    expect(body.reinforcement_type).toBe("contradicted");
   });
 });
 
